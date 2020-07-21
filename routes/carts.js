@@ -7,11 +7,19 @@ const {
   updateCart,
   addItemToCart,
   updateItemInCart,
+  deleteItemInCart,
 } = require('../controllers/carts');
 
-router.route('/').post(createCart);
-router.route('/:id').get(getCart).put(updateCart);
-router.route('/:id/items').put(addItemToCart);
-router.route('/:cartId/items/:itemId').put(updateItemInCart);
+const { protect } = require('../middleware/auth');
+
+//router.route('/').post(protect, createCart);
+router
+  .route('/:userId') /*.get(protect, getCart)*/
+  .put(protect, updateCart);
+router.route('/:userId/items').put(protect, addItemToCart);
+router
+  .route('/:userId/items/:itemId')
+  .put(protect, updateItemInCart)
+  .delete(protect, deleteItemInCart);
 
 module.exports = router;
