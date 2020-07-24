@@ -11,6 +11,7 @@ const orderSchema = {
     type: Date,
     required: true,
   },
+  //Ordered items
   items: [itemSchema],
 };
 

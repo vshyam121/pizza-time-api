@@ -10,14 +10,21 @@ const { generatePizzaHashMap } = require('../utils/utils');
 exports.updateCart = asyncHandler(async (req, res, next) => {
   let incomingCart = req.body;
 
+  //Pizza hash to index in items array
   let pizzaHashMap = {};
+
+  //Will contain items deduped by pizza attributes
   let dedupedItems = [];
+
+  //Number of items in cart
   let cartQuantity = 0;
 
   //Make sure incoming items are deduped on items containing same pizza
   //Construct pizza hashmap and get cart quantity
   incomingCart.items.forEach((item) => {
+    //Get hash of incoming pizza
     let pizzaHash = hash(item.pizza);
+
     //If pizza already in hashmap, then just update the quantity
     if (pizzaHash in pizzaHashMap) {
       dedupedItems[pizzaHashMap[pizzaHash]].quantity += item.quantity;
@@ -27,6 +34,8 @@ exports.updateCart = asyncHandler(async (req, res, next) => {
       pizzaHashMap[pizzaHash] = dedupedItems.length;
       dedupedItems.push(item);
     }
+
+    //Add item's quantity to overall cart quantity
     cartQuantity += item.quantity;
   });
 
@@ -58,6 +67,8 @@ exports.updateCart = asyncHandler(async (req, res, next) => {
       )
     );
   }
+
+  //Send 200 response with user's cart
   res.status(200).json({ success: true, data: user.cart });
 });
 
@@ -356,9 +367,13 @@ exports.deleteItemInCart = asyncHandler(async (req, res, next) => {
     (item) => item._id == req.params.itemId
   );
 
+  //Subtract item's quantity from total cart quantity
   cartQuantity -= currentItems[matchingItemIdIndex].quantity;
+
+  //Remove item from items array
   currentItems.splice(matchingItemIdIndex, 1);
 
+  //Generate hash map
   let pizzaHashMap = generatePizzaHashMap(currentItems);
 
   //Update cart with new items array

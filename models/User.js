@@ -23,6 +23,7 @@ const UserSchema = new mongoose.Schema(
       minlength: 6,
       select: false,
     },
+    //User's cart
     cart: {
       type: CartSchema,
       default: {
@@ -32,6 +33,7 @@ const UserSchema = new mongoose.Schema(
       },
       required: true,
     },
+    //Array of user's orders
     orders: [
       {
         type: mongoose.Schema.ObjectId,

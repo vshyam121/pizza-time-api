@@ -54,7 +54,7 @@ exports.signIn = asyncHandler(async (req, res, next) => {
     );
   }
 
-  //Get id and cart
+  //Get user id and cart
   user = await User.findOne({ email }, { _id: 1, cart: 1 }, { new: true });
 
   sendTokenResponse(user, 200, res);
@@ -77,7 +77,7 @@ const sendTokenResponse = (user, statusCode, res) => {
   const expires = new Date(
     Date.now() + process.env.COOKIE_EXPIRES_IN * 60 * 60 * 1000
   );
-  console.log(expires.getTime());
+
   const options = {
     expires: expires,
     httpOnly: true,

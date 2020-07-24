@@ -7,6 +7,8 @@ const { protect } = require('../middleware/auth');
 
 router.post('/signup', signUp);
 router.post('/signin', signIn);
+
+//Check if user is already signed in
 router.get('/me', protect, getMe);
 router.post('/signout', protect, signOut);
 

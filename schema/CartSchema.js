@@ -4,7 +4,7 @@ const itemSchema = require('./itemSchema');
 const cartSchema = {
   //Array of cart items
   items: [itemSchema],
-  //Hash of pizza to index in items array
+  //Hashes of pizza attributes to index in items array
   pizzaHashMap: {
     type: mongoose.Schema.Types.Mixed,
     required: true,

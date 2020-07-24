@@ -23,6 +23,8 @@ const app = express();
 //Body parser
 app.use(express.json());
 app.use(cookieParser());
+
+//CORS set with credentials and corresponding frontend origin
 app.use(
   cors({
     origin: 'https://localhost:3000',
