@@ -2,54 +2,45 @@ const User = require('../models/User');
 const ErrorResponse = require('../utils/ErrorResponse');
 const asyncHandler = require('../middleware/async');
 const hash = require('object-hash');
-
-/*
-//@desc     Get cart with id
-//@route    GET /carts/:id
-//@access   Private
-exports.getCart = asyncHandler(async (req, res, next) => {
-  const cart = await Cart.findById(req.params.id);
-  if (!cart) {
-    return next(
-      new ErrorResponse(`Cart not found with id of ${req.params.id}`, 404)
-    );
-  }
-  res.status(201).json({ success: true, data: cart });
-});
-
-//@desc     Get new cart
-//@route    POST /carts
-//@access   Private
-exports.createCart = asyncHandler(async (req, res, next) => {
-  console.log(req.body);
-  const cart = await Cart.create(req.body);
-  res.status(201).json({ success: true, data: cart });
-});*/
+const { generatePizzaHashMap } = require('../utils/utils');
 
 //@desc     Update a cart with id
 //@route    PUT /carts/:userId
 //@access   Private
 exports.updateCart = asyncHandler(async (req, res, next) => {
-  //Need to update item hash map as well
-
   let incomingCart = req.body;
-  //if update to cart has items, then associate hash with each of them
-  //also calculate total cart quantity
-  if (incomingCart.items.length > 0) {
-    let itemsWithHashes = [];
-    let totalQuantity = 0;
 
-    //add hash to each item, calculate total quantity
-    itemsWithHashes = incomingCart.items.map((item) => {
-      totalQuantity += item.quantity;
-      return { ...item, hash: hash(item.pizza) };
-    });
+  let pizzaHashMap = {};
+  let dedupedItems = [];
+  let cartQuantity = 0;
 
-    //add items with hashes and new cart quantity to updated cart
-    incomingCart.items = itemsWithHashes;
-    incomingCart.quantity = totalQuantity;
-  }
+  //Make sure incoming items are deduped on items containing same pizza
+  //Construct pizza hashmap and get cart quantity
+  incomingCart.items.forEach((item) => {
+    let pizzaHash = hash(item.pizza);
+    //If pizza already in hashmap, then just update the quantity
+    if (pizzaHash in pizzaHashMap) {
+      dedupedItems[pizzaHashMap[pizzaHash]].quantity += item.quantity;
+    }
+    //Otherwise add to hash map and add item to deduped items
+    else {
+      pizzaHashMap[pizzaHash] = dedupedItems.length;
+      dedupedItems.push(item);
+    }
+    cartQuantity += item.quantity;
+  });
 
+  //Set items to deduped items
+  incomingCart.items = dedupedItems;
+
+  //Set constructed pizza hash map
+  incomingCart.pizzaHashMap = pizzaHashMap;
+
+  //Set total cart quantity
+  incomingCart.quantity = cartQuantity;
+
+  //Update cart for user id with deduped items
+  //pizza hash map and cart quantity
   const user = await User.findOneAndUpdate(
     { _id: req.params.userId },
     { cart: incomingCart },
@@ -58,6 +49,7 @@ exports.updateCart = asyncHandler(async (req, res, next) => {
       runValidators: true,
     }
   ).select('cart');
+
   if (!user) {
     return next(
       new ErrorResponse(
@@ -66,52 +58,25 @@ exports.updateCart = asyncHandler(async (req, res, next) => {
       )
     );
   }
-  res.status(201).json({ success: true, data: user.cart });
+  res.status(200).json({ success: true, data: user.cart });
 });
 
 //@desc     Add a new item to cart
-//@route    PUT /carts/:userId/items
+//@route    POST /carts/:userId/items
 //@access   Private
-exports.addItemToCart = asyncHandler(async (req, res, next) => {
-  let item = req.body;
-  item = { ...item, hash: hash(item.pizza) };
+exports.addItemsToCart = asyncHandler(async (req, res, next) => {
+  let items = req.body;
 
-  //if hash of new item already exists, then update item quantity
-  //and cart quantity
-  let user = await User.findOneAndUpdate(
+  //Get user's cart
+  let user = await User.findOne(
     {
       _id: req.params.userId,
-      'cart.items.hash': hash(item.pizza),
     },
     {
-      $inc: {
-        'cart.items.$.quantity': item.quantity,
-        'cart.quantity': item.quantity,
-      },
+      cart: 1,
     },
     { new: true }
-  ).select('cart');
-
-  //if hash of new item doesn't exist, then push to items array
-  //and update total quantity
-  if (!user) {
-    user = await User.findOneAndUpdate(
-      {
-        _id: req.params.userId,
-      },
-      {
-        $push: {
-          'cart.items': {
-            ...item,
-          },
-        },
-        $inc: {
-          'cart.quantity': item.quantity,
-        },
-      },
-      { new: true }
-    ).select('cart');
-  }
+  ).lean();
 
   if (!user) {
     return next(
@@ -121,159 +86,295 @@ exports.addItemToCart = asyncHandler(async (req, res, next) => {
       )
     );
   }
-  res.status(201).json({ success: true, data: user.cart });
+
+  let currentItems = user.cart.items;
+  let pizzaHashMap = user.cart.pizzaHashMap;
+  let cartQuantity = user.cart.quantity;
+
+  for (let item of items) {
+    //If matching item index found in pizza hash map, then update quantity for that cart item
+    let pizzaHash = hash(item.pizza);
+    if (pizzaHash in pizzaHashMap) {
+      let matchingItemIndex = pizzaHashMap[pizzaHash];
+      currentItems[matchingItemIndex].quantity += item.quantity;
+    }
+    //Otherwise, push item to items array
+    else {
+      //Delete id if coming from local cart
+      delete item['_id'];
+
+      //Add to items array
+      currentItems.push(item);
+
+      //Set pizza hash to point to index of added item
+      pizzaHashMap[pizzaHash] = currentItems.length - 1;
+    }
+
+    //Update cart quantity with quantity of item
+    cartQuantity += item.quantity;
+  }
+
+  //Update cart with new items array
+  //hash map and quantity
+  user = await User.findOneAndUpdate(
+    {
+      _id: req.params.userId,
+    },
+    {
+      'cart.items': currentItems,
+      'cart.pizzaHashMap': pizzaHashMap,
+      'cart.quantity': cartQuantity,
+    },
+    { new: true, runValidators: true }
+  )
+    .select('cart.items')
+    .select('cart.quantity');
+
+  if (!user) {
+    return next(
+      new ErrorResponse(
+        `Cart not found for user with id of ${req.params.userId}`,
+        404
+      )
+    );
+  }
+  res.status(200).json({ success: true, cart: user.cart });
+});
+
+const updateItemsHelper = (
+  incomingItem,
+  pizzaHashMap,
+  cartQuantity,
+  currentItems,
+  itemId
+) => {
+  //Hash of incoming item
+  let incomingPizzaHash = hash(incomingItem.pizza);
+
+  //Get index of matching item id in items array
+  let matchingItemIdIndex = currentItems.findIndex(
+    (item) => item._id == itemId
+  );
+
+  //Update cart quantity
+  cartQuantity -= currentItems[matchingItemIdIndex].quantity;
+  cartQuantity += incomingItem.quantity;
+
+  //If matching item index found in pizza hash map, then update quantity for that cart item
+  if (incomingPizzaHash in pizzaHashMap) {
+    //Get index of item with matching hash in items array
+    let matchingPizzaIndex = pizzaHashMap[incomingPizzaHash];
+
+    //If matching hash item's id does not matching incoming item id,
+    //then update quantity of matching item and remove traces of the old item
+    if (currentItems[matchingPizzaIndex]._id != itemId) {
+      //Add to quantity of matching item
+      currentItems[matchingPizzaIndex].quantity += incomingItem.quantity;
+
+      //Remove old item from currentItems array
+      currentItems.splice(matchingItemIdIndex, 1);
+
+      //Need to regenerate pizza hashmap
+      pizzaHashMap = generatePizzaHashMap(currentItems);
+    }
+    //Otherwise, replace the quantity of matching item
+    else {
+      currentItems[matchingPizzaIndex].quantity = incomingItem.quantity;
+    }
+  }
+  //If matching item index not found in hash map, replace item in item array
+  else {
+    //Remove old item's pizza hash
+    let oldPizzaHash = hash(currentItems[matchingItemIdIndex].pizza);
+    delete pizzaHashMap[oldPizzaHash];
+
+    //Put in new hash in hash map pointing to same index
+    pizzaHashMap[incomingPizzaHash] = matchingItemIdIndex;
+
+    //Relace with new item in item array
+    incomingItem = { _id: itemId, ...incomingItem };
+    currentItems.splice(matchingItemIdIndex, 1, incomingItem);
+  }
+
+  return [cartQuantity, pizzaHashMap];
+};
+
+//@desc     Patch part of a cart item
+//@route    PATCH /carts/:userId/items/:itemId
+//@access   Private
+exports.patchItemInCart = asyncHandler(async (req, res, next) => {
+  let partialItem = req.body;
+
+  //Get user's cart
+  let user = await User.findOne(
+    {
+      _id: req.params.userId,
+      'cart.items._id': req.params.itemId,
+    },
+    {
+      cart: 1,
+    },
+    { new: true }
+  ).lean();
+
+  if (!user) {
+    return next(
+      new ErrorResponse(
+        `Cart or item not found for user with id of ${req.params.userId}`,
+        404
+      )
+    );
+  }
+
+  let currentItems = user.cart.items;
+  let pizzaHashMap = user.cart.pizzaHashMap;
+  let cartQuantity = user.cart.quantity;
+
+  let matchingItemIdIndex = currentItems.findIndex(
+    (currentItem) => currentItem._id == req.params.itemId
+  );
+
+  //Update part of the item with corresponding item id
+  let currentItem = currentItems[matchingItemIdIndex];
+  currentItem = { ...currentItem, ...req.body };
+
+  //Make sure to update pizza hashmap and quantity
+  //based on updated item
+  [cartQuantity, pizzaHashMap] = updateItemsHelper(
+    currentItem,
+    pizzaHashMap,
+    cartQuantity,
+    currentItems,
+    req.params.itemId
+  );
+
+  //Update cart with new items array
+  //and corresponding bookkeeping data
+  user = await User.findOneAndUpdate(
+    {
+      _id: req.params.userId,
+    },
+    {
+      'cart.items': currentItems,
+      'cart.pizzaHashMap': pizzaHashMap,
+      'cart.quantity': cartQuantity,
+    },
+    { new: true, runValidators: true }
+  )
+    .select('cart.items')
+    .select('cart.quantity');
+
+  res.status(200).json({ success: true, cart: user.cart });
 });
 
 //@desc     Update an entire cart item
 //@route    PUT /carts/:userId/items/:itemId
 //@access   Private
 exports.updateItemInCart = asyncHandler(async (req, res, next) => {
-  let item = req.body;
-  //Add hash to item
-  item = { ...item, hash: hash(item.pizza) };
+  let incomingItem = req.body;
 
-  //Find item with matching item id
+  //Get user's cart
   let user = await User.findOne(
     {
       _id: req.params.userId,
       'cart.items._id': req.params.itemId,
     },
-    { 'cart.items.$': 1 }
-  ).select('cart');
-
-  console.log(user);
-  if (!user || !user.cart.items) {
-    return next(
-      new ErrorResponse('Incorrect user id or item id provided', 404)
-    );
-  }
-
-  const cart = user.cart;
-  const matchingItemInCart = cart.items[0];
-  //Update total cart quantity with new item quantity
-  const oldItemQuantity = matchingItemInCart.quantity;
-  let newCartQuantity = cart.quantity - oldItemQuantity;
-  newCartQuantity += item.quantity;
-
-  //If hashes match for incoming item and matching item id
-  //then just update item quantity and total cart quantity
-  if (matchingItemInCart.hash === hash(item.pizza)) {
-    user = await User.findOneAndUpdate(
-      { _id: req.params.userId, 'cart.items._id': req.params.itemId },
-      {
-        $set: {
-          'cart.items.$.quantity': item.quantity,
-          'cart.quantity': newCartQuantity,
-        },
-      },
-      {
-        new: true,
-        runValidators: true,
-      }
-    ).select('cart');
-  }
-  //If item id match has a hash that's different from incoming item hash
-  //then see if hash matches another item and update accordingly.
-  else {
-    //First delete old item and update total cart quantity
-    user = await User.findOneAndUpdate(
-      {
-        _id: req.params.userId,
-      },
-      {
-        $set: {
-          'cart.quantity': newCartQuantity,
-        },
-        $pull: {
-          'cart.items': {
-            _id: req.params.itemId,
-          },
-        },
-      },
-      { new: true, runValidators: true }
-    ).select('cart');
-
-    //See if hash matches another item, then increment that item's quantity
-    user = await User.findOneAndUpdate(
-      {
-        _id: req.params.userId,
-        'cart.items.hash': hash(item.pizza),
-      },
-      {
-        $inc: {
-          'cart.items.$.quantity': item.quantity,
-        },
-      },
-      { new: true, runValidators: true }
-    ).select('cart');
-
-    //If hash doesn't match another item, create a new item
-    if (!user) {
-      user = await User.findOneAndUpdate(
-        {
-          _id: req.params.userId,
-        },
-        {
-          $push: {
-            'cart.items': {
-              ...item,
-            },
-          },
-        },
-        { new: true, runValidators: true }
-      ).select('cart');
-    }
-  }
+    {
+      cart: 1,
+    },
+    { new: true }
+  ).lean();
 
   if (!user) {
     return next(
-      new ErrorResponse(`Cart not found with id of ${req.params.cartId}`, 404)
+      new ErrorResponse(
+        `Cart or item not found for user with id of ${req.params.userId}`,
+        404
+      )
     );
   }
-  res.status(201).json({ success: true, data: user.cart });
+
+  let currentItems = user.cart.items;
+  let pizzaHashMap = user.cart.pizzaHashMap;
+  let cartQuantity = user.cart.quantity;
+
+  [cartQuantity, pizzaHashMap] = updateItemsHelper(
+    incomingItem,
+    pizzaHashMap,
+    cartQuantity,
+    currentItems,
+    req.params.itemId
+  );
+
+  //Update cart with new items array
+  user = await User.findOneAndUpdate(
+    {
+      _id: req.params.userId,
+    },
+    {
+      'cart.items': currentItems,
+      'cart.pizzaHashMap': pizzaHashMap,
+      'cart.quantity': cartQuantity,
+    },
+    { new: true, runValidators: true }
+  )
+    .select('cart.items')
+    .select('cart.quantity');
+
+  res.status(200).json({ success: true, cart: user.cart });
 });
 
 //@desc     Delete an item in cart
 //@route    DELETE /carts/:userId/items/:itemId
 //@access   Private
 exports.deleteItemInCart = asyncHandler(async (req, res, next) => {
-  //Find item with matching item id
+  //Get user's cart
   let user = await User.findOne(
     {
       _id: req.params.userId,
       'cart.items._id': req.params.itemId,
     },
-    { 'cart.items.$': 1 }
-  ).select('cart');
-
-  if (!user) {
-    return next(
-      new ErrorResponse('Incorrect cart id or item id provided', 404)
-    );
-  }
-
-  const toBeDeletedItemQuantity = user.cart.items[0].quantity;
-  user = await User.findOneAndUpdate(
-    { _id: req.params.userId, 'cart.items._id': req.params.itemId },
     {
-      $pull: {
-        'cart.items': { _id: req.params.itemId },
-      },
-      $inc: { 'cart.quantity': -toBeDeletedItemQuantity },
+      cart: 1,
     },
-    {
-      new: true,
-      runValidators: true,
-    }
-  ).select('cart');
+    { new: true }
+  ).lean();
 
   if (!user) {
     return next(
       new ErrorResponse(
-        `Cart not found for user with id of ${req.params.userId}`,
+        `Cart or item not found for user with id of ${req.params.userId}`,
         404
       )
     );
   }
-  res.status(201).json({ success: true, data: user.cart });
+
+  let currentItems = user.cart.items;
+  let cartQuantity = user.cart.quantity;
+  //Filter out item id that needs to be deleted
+  let matchingItemIdIndex = currentItems.findIndex(
+    (item) => item._id == req.params.itemId
+  );
+
+  cartQuantity -= currentItems[matchingItemIdIndex].quantity;
+  currentItems.splice(matchingItemIdIndex, 1);
+
+  let pizzaHashMap = generatePizzaHashMap(currentItems);
+
+  //Update cart with new items array
+  user = await User.findOneAndUpdate(
+    {
+      _id: req.params.userId,
+    },
+    {
+      'cart.items': currentItems,
+      'cart.pizzaHashMap': pizzaHashMap,
+      'cart.quantity': cartQuantity,
+    },
+    { new: true, runValidators: true }
+  )
+    .select('cart.items')
+    .select('cart.quantity');
+
+  res.status(200).json({ success: true, cart: user.cart });
 });

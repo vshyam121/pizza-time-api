@@ -2,49 +2,51 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-const CartSchema = require('../schema/CartSchema');
+const cartSchema = require('../schema/cartSchema');
 
-const UserSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, 'Please add a name'],
-  },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    match: [
-      /[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?/,
-      'Please add a valid email address',
+const CartSchema = new mongoose.Schema(cartSchema);
+
+const UserSchema = new mongoose.Schema(
+  {
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      match: [
+        /[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?/,
+        'Please add a valid email address',
+      ],
+    },
+    password: {
+      type: String,
+      required: [true, 'Please add a password'],
+      minlength: 6,
+      select: false,
+    },
+    cart: {
+      type: CartSchema,
+      default: {
+        items: [],
+        pizzaHashMap: {},
+        quantity: 0,
+      },
+      required: true,
+    },
+    orders: [
+      {
+        type: mongoose.Schema.ObjectId,
+        ref: 'Cart',
+      },
     ],
-  },
-  password: {
-    type: String,
-    required: [true, 'Please add a password'],
-    minlength: 6,
-    select: false,
-  },
-  cart: {
-    type: CartSchema,
-    default: {
-      quantity: 0,
-      items: [],
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
+    createdAt: {
+      type: Date,
+      default: Date.now(),
     },
-    required: true,
   },
-  orders: [
-    {
-      type: mongoose.Schema.ObjectId,
-      ref: 'Cart',
-    },
-  ],
-  resetPasswordToken: String,
-  resetPasswordExpire: Date,
-  createdAt: {
-    type: Date,
-    default: Date.now(),
-  },
-});
+  { minimize: false }
+);
 
 //Encrypt password using bcrypt
 UserSchema.pre('save', async function (next) {

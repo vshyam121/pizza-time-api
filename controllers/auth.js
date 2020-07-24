@@ -1,16 +1,16 @@
 const User = require('../models/User');
 const ErrorResponse = require('../utils/ErrorResponse');
 const asyncHandler = require('../middleware/async');
+const jwt = require('jsonwebtoken');
 
 //@desc     Register user
 //@route    POST /auth/register
 //@access   Public
-exports.registerUser = asyncHandler(async (req, res, next) => {
-  const { name, email, password } = req.body;
+exports.signUp = asyncHandler(async (req, res, next) => {
+  const { email, password } = req.body;
 
   //Create user
   const user = await User.create({
-    name,
     email,
     password,
   });
@@ -21,7 +21,7 @@ exports.registerUser = asyncHandler(async (req, res, next) => {
 //@desc     Login user
 //@route    POST /auth/login
 //@access   Public
-exports.loginUser = asyncHandler(async (req, res, next) => {
+exports.signIn = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
 
   //Validate email and password
@@ -30,21 +30,42 @@ exports.loginUser = asyncHandler(async (req, res, next) => {
   }
 
   //Check for user
-  const user = await User.findOne({ email }).select('+password');
+  let user = await User.findOne({ email }, { new: true }).select('+password');
 
   //No user found with incoming email
   if (!user) {
-    return next(new ErrorResponse('Invalid credentials', 401));
+    return next(
+      new ErrorResponse(
+        'The username or password you entered is incorrect',
+        401
+      )
+    );
   }
 
   //Check matching password
   const isMatch = await user.matchPassword(password);
 
   if (!isMatch) {
-    return next(new ErrorResponse('Invalid credentials', 401));
+    return next(
+      new ErrorResponse(
+        'The username or password you entered is incorrect',
+        401
+      )
+    );
   }
 
+  //Get id and cart
+  user = await User.findOne({ email }, { _id: 1, cart: 1 }, { new: true });
+
   sendTokenResponse(user, 200, res);
+});
+
+//@desc     Login user
+//@route    POST /auth/logout
+//@access   Private
+exports.signOut = asyncHandler(async (req, res, next) => {
+  //Delete cookie that has token
+  res.clearCookie('token').status(200).json({ success: true });
 });
 
 //Create token, put it in cookie and send response
@@ -53,10 +74,12 @@ const sendTokenResponse = (user, statusCode, res) => {
   const token = user.getSignedJwtToken();
 
   //Set options for expiration and http only
+  const expires = new Date(
+    Date.now() + process.env.COOKIE_EXPIRES_IN * 60 * 60 * 1000
+  );
+  console.log(expires.getTime());
   const options = {
-    expiresIn: new Date(
-      Date.now() + process.env.COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
-    ),
+    expires: expires,
     httpOnly: true,
   };
 
@@ -67,12 +90,15 @@ const sendTokenResponse = (user, statusCode, res) => {
   res
     .status(statusCode)
     .cookie('token', token, options)
-    .json({ success: true, token });
+    .json({ success: true, user: user, expires: expires.getTime() });
 };
 
 //@desc     Get currently logged in user
 //@route    Get /auth/me
 //@access   Private
 exports.getMe = asyncHandler(async (req, res, next) => {
-  res.status(200).json({ success: true, data: req.user });
+  const decoded = jwt.verify(req.cookies.token, process.env.JWT_SECRET);
+  res
+    .status(200)
+    .json({ success: true, user: req.user, expires: decoded.exp * 1000 });
 });
