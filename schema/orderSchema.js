@@ -36,7 +36,7 @@ const orderSchema = {
     },
     required: false,
   },
-  //Ordered items
+  //Items that are being ordered
   items: [itemSchema],
 };
 

@@ -1,5 +1,6 @@
 const ErrorResponse = require('../utils/ErrorResponse');
 
+/* Sends back more human readable error messages for common cases */
 const errorHandler = (err, req, res, next) => {
   //Log to console for dev
   console.log(err.stack.red);

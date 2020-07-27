@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 
+/* Schema for an item in the cart or in an order */
 const itemSchema = {
+  //Captures just the pizza attributes of the item
   pizza: {
     cheeseAmount: {
       type: String,
@@ -119,6 +121,7 @@ const itemSchema = {
       enum: ['Large', 'Medium', 'Personal'],
     },
   },
+  //Number of this particular item in cart or order
   quantity: {
     type: Number,
     required: true,

@@ -15,6 +15,7 @@ exports.signUp = asyncHandler(async (req, res, next) => {
     password,
   });
 
+  //Send back token in a cookie and user info
   sendTokenResponse(user, 200, res);
 });
 
@@ -87,6 +88,7 @@ const sendTokenResponse = (user, statusCode, res) => {
     options.secure = true;
   }
 
+  //Send back http only cookie, user info and expiration time
   res
     .status(statusCode)
     .cookie('token', token, options)
@@ -98,6 +100,8 @@ const sendTokenResponse = (user, statusCode, res) => {
 //@access   Private
 exports.getMe = asyncHandler(async (req, res, next) => {
   const decoded = jwt.verify(req.cookies.token, process.env.JWT_SECRET);
+
+  //Send back user and expiration time associated with verified token in cookie
   res
     .status(200)
     .json({ success: true, user: req.user, expires: decoded.exp * 1000 });

@@ -46,6 +46,7 @@ exports.submitOrder = asyncHandler(async (req, res, next) => {
     { new: true, runValidators: true }
   );
 
+  //Send back order that was successfully submitted
   res.status(200).json({ success: true, order: order });
 });
 
@@ -72,5 +73,6 @@ exports.getOrders = asyncHandler(async (req, res, next) => {
   //Search for ids in orders array in the orders collection
   const orders = await Order.find({ _id: { $in: user.orders } });
 
+  //Send back all orders for user
   res.status(200).json({ success: true, orders: orders });
 });
