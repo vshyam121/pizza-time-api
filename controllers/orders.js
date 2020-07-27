@@ -24,8 +24,10 @@ exports.submitOrder = asyncHandler(async (req, res, next) => {
     );
   }
 
+  //Tag on order details to items array to create an order
   let orderRequest = { items: [...user.cart.items], ...req.body };
-  //Create a new ordered cart
+
+  //Create the new order in DB
   let order = await Order.create(orderRequest);
 
   if (!order) {
@@ -43,6 +45,7 @@ exports.submitOrder = asyncHandler(async (req, res, next) => {
     },
     { new: true, runValidators: true }
   );
+
   res.status(200).json({ success: true, order: order });
 });
 
@@ -50,6 +53,7 @@ exports.submitOrder = asyncHandler(async (req, res, next) => {
 //@route    GET /orders/:userId
 //@access   Private
 exports.getOrders = asyncHandler(async (req, res, next) => {
+  //Get orders array for given user
   let user = await User.findOne(
     { _id: req.params.userId },
     {
@@ -65,6 +69,7 @@ exports.getOrders = asyncHandler(async (req, res, next) => {
     );
   }
 
+  //Search for ids in orders array in the orders collection
   const orders = await Order.find({ _id: { $in: user.orders } });
 
   res.status(200).json({ success: true, orders: orders });

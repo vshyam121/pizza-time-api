@@ -13,10 +13,7 @@ const {
 
 const { protect } = require('../middleware/auth');
 
-//router.route('/').post(protect, createCart);
-router
-  .route('/:userId') /*.get(protect, getCart)*/
-  .put(protect, updateCart);
+router.route('/:userId').put(protect, updateCart);
 router.route('/:userId/items').post(protect, addItemsToCart);
 router
   .route('/:userId/items/:itemId')

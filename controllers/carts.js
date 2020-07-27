@@ -309,6 +309,8 @@ exports.updateItemInCart = asyncHandler(async (req, res, next) => {
   let pizzaHashMap = user.cart.pizzaHashMap;
   let cartQuantity = user.cart.quantity;
 
+  //Update items array with incoming item and get back
+  //new cart quantity and hash map
   [cartQuantity, pizzaHashMap] = updateItemsHelper(
     incomingItem,
     pizzaHashMap,

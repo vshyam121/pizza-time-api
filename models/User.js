@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 
 const cartSchema = require('../schema/cartSchema');
 
-const CartSchema = new mongoose.Schema(cartSchema);
+const CartSchema = new mongoose.Schema(cartSchema, { minimize: false });
 
 const UserSchema = new mongoose.Schema(
   {
