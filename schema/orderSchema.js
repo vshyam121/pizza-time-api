@@ -13,25 +13,28 @@ const orderSchema = {
   },
   //Delivery address for order
   deliveryAddress: {
-    streetAddress: {
-      type: String,
-      required: true,
+    type: {
+      streetAddress: {
+        type: String,
+        required: true,
+      },
+      secondaryAddress: {
+        type: String,
+      },
+      city: {
+        type: String,
+        required: true,
+      },
+      state: {
+        type: String,
+        required: true,
+      },
+      zipcode: {
+        type: String,
+        required: true,
+      },
     },
-    secondaryAddress: {
-      type: String,
-    },
-    city: {
-      type: String,
-      required: true,
-    },
-    state: {
-      type: String,
-      required: true,
-    },
-    zipcode: {
-      type: String,
-      required: true,
-    },
+    required: false,
   },
   //Ordered items
   items: [itemSchema],
