@@ -20,14 +20,13 @@ const orders = require('./routes/orders');
 
 const app = express();
 
-//Body parser
 app.use(express.json());
 app.use(cookieParser());
 
 //CORS set with credentials and corresponding frontend origin
 app.use(
   cors({
-    origin: 'https://localhost:3000',
+    origin: process.env.FRONTEND_DOMAIN,
     credentials: true,
   })
 );
@@ -42,6 +41,7 @@ app.use('/carts', carts);
 app.use('/auth', auth);
 app.use('/orders', orders);
 
+//Middleware to handle common errors
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
