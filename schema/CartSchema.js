@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const itemSchema = require('./itemSchema');
 
+//Schema for a user's cart
 const cartSchema = {
   //Array of cart items
   items: [itemSchema],

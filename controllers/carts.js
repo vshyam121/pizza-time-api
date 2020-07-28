@@ -1,11 +1,63 @@
+const Cart = require('../models/Cart');
 const User = require('../models/User');
 const ErrorResponse = require('../utils/ErrorResponse');
 const asyncHandler = require('../middleware/async');
 const hash = require('object-hash');
 const { generatePizzaHashMap } = require('../utils/utils');
 
+//@desc Create a cart for user in provided token
+//@route POST /carts
+//@access Private
+exports.createCart = asyncHandler(async (req, res, next) => {
+  //Get user from user id
+  let user = await User.findOne({ _id: req.user._id });
+
+  if (!user) {
+    return next(new ErrorResponse('Unable to find user', 400));
+  }
+
+  //Create an empty cart
+  const cart = await Cart.create({});
+
+  if (!cart) {
+    return next(new ErrorResponse('Unable to create cart', 500));
+  }
+
+  //Update user with id of newly created cart
+  user = await User.findOneAndUpdate({ _id: req.user._id }, { cart: cart._id });
+
+  if (!user) {
+    return next(new ErrorResponse('Unable to create cart for user', 500));
+  }
+
+  //Send new cart back
+  res.status(201).json({ success: true, cart: cart });
+});
+
+//@desc Get cart for user in provided token
+//@route GET /carts
+//@access Private
+exports.getCart = asyncHandler(async (req, res, next) => {
+  //Find the user by id
+  let user = await User.findOne(
+    { _id: req.user._id },
+    { cart: 1 },
+    { new: true }
+  );
+
+  if (!user) {
+    return next(new ErrorResponse('Unable to find user', 400));
+  }
+
+  //Find the cart using the cart id in user
+  const cart = await Cart.findOne({ _id: user.cart });
+
+  //Send cart back
+  res.status(200).json({ success: true, cart: cart });
+});
+
 //@desc     Update a cart with id
-//@route    PUT /carts/:userId
+//@route    PUT /carts/:cartId
 //@access   Private
 exports.updateCart = asyncHandler(async (req, res, next) => {
   let incomingCart = req.body;
@@ -50,57 +102,43 @@ exports.updateCart = asyncHandler(async (req, res, next) => {
 
   //Update cart for user id with deduped items
   //pizza hash map and cart quantity
-  const user = await User.findOneAndUpdate(
-    { _id: req.params.userId },
-    { cart: incomingCart },
+  const cart = await Cart.findOneAndUpdate(
+    { _id: req.params.cartId },
+    {
+      $set: {
+        items: incomingCart.items,
+        pizzaHashMap: incomingCart.pizzaHashMap,
+        quantity: incomingCart.quantity,
+      },
+    },
     {
       new: true,
       runValidators: true,
     }
-  ).select('cart');
+  );
 
-  if (!user) {
-    return next(
-      new ErrorResponse(
-        `Cart not found for user with id of ${req.params.userId}`,
-        404
-      )
-    );
-  }
-
-  //Send 200 response with user's cart
-  res.status(200).json({ success: true, data: user.cart });
+  //Send 200 response with cart contents
+  res.status(200).json({ success: true, data: cart });
 });
 
 //@desc     Add a new item to cart
-//@route    POST /carts/:userId/items
+//@route    POST /carts/:cartId/items
 //@access   Private
 exports.addItemsToCart = asyncHandler(async (req, res, next) => {
   let items = req.body;
 
   //Get user's cart
-  let user = await User.findOne(
-    {
-      _id: req.params.userId,
-    },
-    {
-      cart: 1,
-    },
-    { new: true }
-  ).lean();
+  let cart = await Cart.findOne({
+    _id: req.params.cartId,
+  }).lean();
 
-  if (!user) {
-    return next(
-      new ErrorResponse(
-        `Cart not found for user with id of ${req.params.userId}`,
-        404
-      )
-    );
+  if (!cart) {
+    return next(new ErrorResponse(`Cart not found`, 400));
   }
 
-  let currentItems = user.cart.items;
-  let pizzaHashMap = user.cart.pizzaHashMap;
-  let cartQuantity = user.cart.quantity;
+  let currentItems = cart.items;
+  let pizzaHashMap = cart.pizzaHashMap;
+  let cartQuantity = cart.quantity;
 
   for (let item of items) {
     //If matching item index found in pizza hash map, then update quantity for that cart item
@@ -127,31 +165,25 @@ exports.addItemsToCart = asyncHandler(async (req, res, next) => {
 
   //Update cart with new items array
   //hash map and quantity
-  user = await User.findOneAndUpdate(
+  cart = await Cart.findOneAndUpdate(
     {
-      _id: req.params.userId,
+      _id: req.params.cartId,
     },
     {
-      'cart.items': currentItems,
-      'cart.pizzaHashMap': pizzaHashMap,
-      'cart.quantity': cartQuantity,
+      items: currentItems,
+      pizzaHashMap: pizzaHashMap,
+      quantity: cartQuantity,
     },
     { new: true, runValidators: true }
-  )
-    .select('cart.items')
-    .select('cart.quantity');
+  );
 
-  if (!user) {
-    return next(
-      new ErrorResponse(
-        `Cart not found for user with id of ${req.params.userId}`,
-        404
-      )
-    );
+  if (!cart) {
+    return next(new ErrorResponse(`Unable to add item(s) to cart`, 500));
   }
-  res.status(200).json({ success: true, cart: user.cart });
+  res.status(200).json({ success: true, cart: cart });
 });
 
+//@desc Helper function for updating items array with a new item
 const updateItemsHelper = (
   incomingItem,
   pizzaHashMap,
@@ -211,36 +243,26 @@ const updateItemsHelper = (
 };
 
 //@desc     Patch part of a cart item
-//@route    PATCH /carts/:userId/items/:itemId
+//@route    PATCH /carts/:cartId/items/:itemId
 //@access   Private
 exports.patchItemInCart = asyncHandler(async (req, res, next) => {
   let partialItem = req.body;
 
   //Get user's cart
-  let user = await User.findOne(
-    {
-      _id: req.params.userId,
-      'cart.items._id': req.params.itemId,
-    },
-    {
-      cart: 1,
-    },
-    { new: true }
-  ).lean();
+  let cart = await Cart.findOne({
+    _id: req.params.cartId,
+    'items._id': req.params.itemId,
+  }).lean();
 
-  if (!user) {
-    return next(
-      new ErrorResponse(
-        `Cart or item not found for user with id of ${req.params.userId}`,
-        404
-      )
-    );
+  if (!cart) {
+    return next(new ErrorResponse('Cart or item not found', 400));
   }
 
-  let currentItems = user.cart.items;
-  let pizzaHashMap = user.cart.pizzaHashMap;
-  let cartQuantity = user.cart.quantity;
+  let currentItems = cart.items;
+  let pizzaHashMap = cart.pizzaHashMap;
+  let cartQuantity = cart.quantity;
 
+  //Get index of item with item id that is being changed
   let matchingItemIdIndex = currentItems.findIndex(
     (currentItem) => currentItem._id == req.params.itemId
   );
@@ -261,53 +283,45 @@ exports.patchItemInCart = asyncHandler(async (req, res, next) => {
 
   //Update cart with new items array
   //and corresponding bookkeeping data
-  user = await User.findOneAndUpdate(
+  cart = await Cart.findOneAndUpdate(
     {
-      _id: req.params.userId,
+      _id: req.params.cartId,
     },
     {
-      'cart.items': currentItems,
-      'cart.pizzaHashMap': pizzaHashMap,
-      'cart.quantity': cartQuantity,
+      items: currentItems,
+      pizzaHashMap: pizzaHashMap,
+      quantity: cartQuantity,
     },
     { new: true, runValidators: true }
-  )
-    .select('cart.items')
-    .select('cart.quantity');
+  );
 
-  res.status(200).json({ success: true, cart: user.cart });
+  if (!cart) {
+    return next(new ErrorResponse('Unable to patch item to cart', 500));
+  }
+
+  //Send back updated cart
+  res.status(200).json({ success: true, cart: cart });
 });
 
 //@desc     Update an entire cart item
-//@route    PUT /carts/:userId/items/:itemId
+//@route    PUT /carts/:cartId/items/:itemId
 //@access   Private
 exports.updateItemInCart = asyncHandler(async (req, res, next) => {
   let incomingItem = req.body;
 
   //Get user's cart
-  let user = await User.findOne(
-    {
-      _id: req.params.userId,
-      'cart.items._id': req.params.itemId,
-    },
-    {
-      cart: 1,
-    },
-    { new: true }
-  ).lean();
+  let cart = await Cart.findOne({
+    _id: req.params.cartId,
+    'items._id': req.params.itemId,
+  }).lean();
 
-  if (!user) {
-    return next(
-      new ErrorResponse(
-        `Cart or item not found for user with id of ${req.params.userId}`,
-        404
-      )
-    );
+  if (!cart) {
+    return next(new ErrorResponse('Cart or item not found', 400));
   }
 
-  let currentItems = user.cart.items;
-  let pizzaHashMap = user.cart.pizzaHashMap;
-  let cartQuantity = user.cart.quantity;
+  let currentItems = cart.items;
+  let pizzaHashMap = cart.pizzaHashMap;
+  let cartQuantity = cart.quantity;
 
   //Update items array with incoming item and get back
   //new cart quantity and hash map
@@ -320,50 +334,42 @@ exports.updateItemInCart = asyncHandler(async (req, res, next) => {
   );
 
   //Update cart with new items array
-  user = await User.findOneAndUpdate(
+  cart = await Cart.findOneAndUpdate(
     {
-      _id: req.params.userId,
+      _id: req.params.cartId,
     },
     {
-      'cart.items': currentItems,
-      'cart.pizzaHashMap': pizzaHashMap,
-      'cart.quantity': cartQuantity,
+      items: currentItems,
+      pizzaHashMap: pizzaHashMap,
+      quantity: cartQuantity,
     },
     { new: true, runValidators: true }
-  )
-    .select('cart.items')
-    .select('cart.quantity');
+  );
 
-  res.status(200).json({ success: true, cart: user.cart });
+  if (!cart) {
+    return next(new ErrorResponse('Unable to update item', 500));
+  }
+
+  //Send back updated cart
+  res.status(200).json({ success: true, cart: cart });
 });
 
 //@desc     Delete an item in cart
-//@route    DELETE /carts/:userId/items/:itemId
+//@route    DELETE /carts/:cartId/items/:itemId
 //@access   Private
 exports.deleteItemInCart = asyncHandler(async (req, res, next) => {
   //Get user's cart
-  let user = await User.findOne(
-    {
-      _id: req.params.userId,
-      'cart.items._id': req.params.itemId,
-    },
-    {
-      cart: 1,
-    },
-    { new: true }
-  ).lean();
+  let cart = await Cart.findOne({
+    _id: req.params.cartId,
+    'items._id': req.params.itemId,
+  }).lean();
 
-  if (!user) {
-    return next(
-      new ErrorResponse(
-        `Cart or item not found for user with id of ${req.params.userId}`,
-        404
-      )
-    );
+  if (!cart) {
+    return next(new ErrorResponse('Cart not found', 400));
   }
 
-  let currentItems = user.cart.items;
-  let cartQuantity = user.cart.quantity;
+  let currentItems = cart.items;
+  let cartQuantity = cart.quantity;
   //Filter out item id that needs to be deleted
   let matchingItemIdIndex = currentItems.findIndex(
     (item) => item._id == req.params.itemId
@@ -379,19 +385,22 @@ exports.deleteItemInCart = asyncHandler(async (req, res, next) => {
   let pizzaHashMap = generatePizzaHashMap(currentItems);
 
   //Update cart with new items array
-  user = await User.findOneAndUpdate(
+  cart = await Cart.findOneAndUpdate(
     {
-      _id: req.params.userId,
+      _id: req.params.cartId,
     },
     {
-      'cart.items': currentItems,
-      'cart.pizzaHashMap': pizzaHashMap,
-      'cart.quantity': cartQuantity,
+      items: currentItems,
+      pizzaHashMap: pizzaHashMap,
+      quantity: cartQuantity,
     },
     { new: true, runValidators: true }
-  )
-    .select('cart.items')
-    .select('cart.quantity');
+  );
 
-  res.status(200).json({ success: true, cart: user.cart });
+  if (!cart) {
+    return next(new ErrorResponse('Unable to delete item', 500));
+  }
+
+  //Send back updated cart
+  res.status(200).json({ success: true, cart: cart });
 });

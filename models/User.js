@@ -6,49 +6,41 @@ const cartSchema = require('../schema/cartSchema');
 
 const CartSchema = new mongoose.Schema(cartSchema, { minimize: false });
 
-const UserSchema = new mongoose.Schema(
-  {
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      match: [
-        /[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?/,
-        'Please add a valid email address',
-      ],
-    },
-    password: {
-      type: String,
-      required: [true, 'Please add a password'],
-      minlength: 6,
-      select: false,
-    },
-    //User's cart
-    cart: {
-      type: CartSchema,
-      default: {
-        items: [],
-        pizzaHashMap: {},
-        quantity: 0,
-      },
-      required: true,
-    },
-    //Array of user's orders
-    orders: [
-      {
-        type: mongoose.Schema.ObjectId,
-        ref: 'Cart',
-      },
+const UserSchema = new mongoose.Schema({
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    match: [
+      /[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?/,
+      'Please add a valid email address',
     ],
-    resetPasswordToken: String,
-    resetPasswordExpire: Date,
-    createdAt: {
-      type: Date,
-      default: Date.now(),
-    },
   },
-  { minimize: false }
-);
+  password: {
+    type: String,
+    required: [true, 'Please add a password'],
+    minlength: 6,
+    select: false,
+  },
+  //User's cart
+  cart: {
+    type: mongoose.Schema.ObjectId,
+    ref: 'Cart',
+  },
+  //Array of user's orders
+  orders: [
+    {
+      type: mongoose.Schema.ObjectId,
+      ref: 'Cart',
+    },
+  ],
+  resetPasswordToken: String,
+  resetPasswordExpire: Date,
+  createdAt: {
+    type: Date,
+    default: Date.now(),
+  },
+});
 
 //Encrypt password using bcrypt
 UserSchema.pre('save', async function (next) {
