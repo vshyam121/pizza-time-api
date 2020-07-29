@@ -27,7 +27,9 @@ exports.signIn = asyncHandler(async (req, res, next) => {
 
   //Validate email and password
   if (!email || !password) {
-    return next(new ErrorResponse('Please provide an email and password', 400));
+    return next(
+      new ErrorResponse('Please provide an email and password.', 400)
+    );
   }
 
   //Check for user
@@ -37,7 +39,7 @@ exports.signIn = asyncHandler(async (req, res, next) => {
   if (!user) {
     return next(
       new ErrorResponse(
-        'The username or password you entered is incorrect',
+        'The username or password you entered is incorrect.',
         401
       )
     );
@@ -49,7 +51,7 @@ exports.signIn = asyncHandler(async (req, res, next) => {
   if (!isMatch) {
     return next(
       new ErrorResponse(
-        'The username or password you entered is incorrect',
+        'The username or password you entered is incorrect.',
         401
       )
     );
@@ -82,6 +84,8 @@ const sendTokenResponse = (user, statusCode, res) => {
   const options = {
     expires: expires,
     httpOnly: true,
+    sameSite: 'none',
+    secure: true,
   };
 
   if (process.env.NODE_ENV === 'production') {
