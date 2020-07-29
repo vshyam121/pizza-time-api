@@ -133,7 +133,7 @@ exports.addItemsToCart = asyncHandler(async (req, res, next) => {
   }).lean();
 
   if (!cart) {
-    return next(new ErrorResponse(`Cart not found`, 400));
+    return next(new ErrorResponse('Cart not found', 400));
   }
 
   let currentItems = cart.items;
@@ -178,7 +178,7 @@ exports.addItemsToCart = asyncHandler(async (req, res, next) => {
   );
 
   if (!cart) {
-    return next(new ErrorResponse(`Unable to add item(s) to cart`, 500));
+    return next(new ErrorResponse('Unable to add item(s) to cart', 500));
   }
   res.status(200).json({ success: true, cart: cart });
 });
