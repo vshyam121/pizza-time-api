@@ -67,8 +67,16 @@ exports.signIn = asyncHandler(async (req, res, next) => {
 //@route    POST /auth/logout
 //@access   Private
 exports.signOut = asyncHandler(async (req, res, next) => {
+  const options = {
+    sameSite: 'none',
+  };
+
+  if (process.env.NODE_ENV === 'production') {
+    options.secure = true;
+  }
+
   //Delete cookie that has token
-  res.clearCookie('token').status(200).json({ success: true });
+  res.clearCookie('token', options).status(200).json({ success: true });
 });
 
 //Create token, put it in cookie and send response
@@ -85,7 +93,6 @@ const sendTokenResponse = (user, statusCode, res) => {
     expires: expires,
     httpOnly: true,
     sameSite: 'none',
-    secure: true,
   };
 
   if (process.env.NODE_ENV === 'production') {
